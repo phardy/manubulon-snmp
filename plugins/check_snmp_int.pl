@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 ############################## check_snmp_int ##############
-my $VERSION = "2.1.0";
+my $VERSION = "2.2.0-ph";
 
 # Date : Oct 10 2007
 # Author  : Patrick Proy ( patrick at proy.org )
@@ -40,10 +40,12 @@ my $speed_table        = '1.3.6.1.2.1.2.2.1.5.';
 my $speed_table_64     = '1.3.6.1.2.1.31.1.1.1.15.';
 my $in_octet_table     = '1.3.6.1.2.1.2.2.1.10.';
 my $in_octet_table_64  = '1.3.6.1.2.1.31.1.1.1.6.';
+my $in_packet_table    = '1.3.6.1.2.1.2.2.1.11.';
 my $in_error_table     = '1.3.6.1.2.1.2.2.1.14.';
 my $in_discard_table   = '1.3.6.1.2.1.2.2.1.13.';
 my $out_octet_table    = '1.3.6.1.2.1.2.2.1.16.';
 my $out_octet_table_64 = '1.3.6.1.2.1.31.1.1.1.10.';
+my $out_packet_table   = '1.3.6.1.2.1.2.2.1.17.';
 my $out_error_table    = '1.3.6.1.2.1.2.2.1.20.';
 my $out_discard_table  = '1.3.6.1.2.1.2.2.1.19.';
 
@@ -116,7 +118,7 @@ my $o_privproto = 'des';        # Priv protocol
 my $o_privpass  = undef;        # priv password
 
 # Readable names for counters (M. Berger contrib)
-my @countername = ("in=", "out=", "errors-in=", "errors-out=", "discard-in=", "discard-out=");
+my @countername = ("in=", "out=", "packets-in=", "packets-out=", "errors-in=", "errors-out=", "discard-in=", "discard-out=");
 my $checkperf_out_desc;
 
 # functions
@@ -619,9 +621,10 @@ my @tindex = undef;
 my @oids   = undef;
 my @descr  = undef;
 my (
-    @oid_perf,        @oid_perf_outoct, @oid_perf_inoct, @oid_perf_inerr,
-    @oid_perf_outerr, @oid_perf_indisc, @oid_perf_outdisc
-) = (undef, undef, undef, undef, undef, undef, undef);
+    @oid_perf,        @oid_perf_outoct, @oid_perf_inoct, @oid_perf_inpkt,
+    @oid_perf_outpkt, @oid_perf_inerr, @oid_perf_outerr, @oid_perf_indisc,
+    @oid_perf_outdisc
+) = (undef, undef, undef, undef, undef, undef, undef, undef, undef);
 my @oid_speed      = undef;
 my @oid_speed_high = undef;
 my $num_int        = 0;
@@ -714,6 +717,8 @@ foreach my $key (sort { $$resultat{$a} cmp $$resultat{$b} } keys %$resultat) {
                 $oid_speed[$num_int]=$speed_table . $tindex[$num_int];
                 $oid_speed_high[$num_int]=$speed_table_64 . $tindex[$num_int];
                 if (defined($o_ext_checkperf) || defined($o_perfe)) {
+                    $oid_perf_inpkt[$num_int] = $in_packet_table . $tindex[$num_int];
+                    $oid_perf_outpkt[$num_int] = $out_packet_table . $tindex[$num_int];
                     $oid_perf_indisc[$num_int]= $in_discard_table . $tindex[$num_int];
                     $oid_perf_outdisc[$num_int]= $out_discard_table . $tindex[$num_int];
                     $oid_perf_inerr[$num_int]= $in_error_table . $tindex[$num_int];
@@ -738,7 +743,7 @@ if (defined($o_perf) || defined($o_checkperf)) {
         @oids = (@oids, @oid_speed_high);
     }
     if (defined($o_ext_checkperf) || defined($o_perfe)) {
-        @oids = (@oids, @oid_perf_inerr, @oid_perf_outerr, @oid_perf_indisc, @oid_perf_outdisc);
+        @oids = (@oids, @oid_perf_inpkt, @oid_perf_outpkt, @oid_perf_inerr, @oid_perf_outerr, @oid_perf_indisc, @oid_perf_outdisc);
     }
 }
 
@@ -877,16 +882,22 @@ for (my $i = 0; $i < $num_int; $i++) {
 
                         if (defined($o_ext_checkperf)) {
                             $checkperf_out[2]
-                                = (($$result{ $oid_perf_inerr[$i] } - $file_values[$j][3])
+                                = (($$result{ $oid_perf_inpkt[$i] } - $file_values[$j][3])
                                 / ($timenow - $file_values[$j][0])) * 60;
                             $checkperf_out[3]
-                                = (($$result{ $oid_perf_outerr[$i] } - $file_values[$j][4])
+                                = (($$result{ $oid_perf_outpkt[$i] } - $file_values[$j][4])
                                 / ($timenow - $file_values[$j][0])) * 60;
                             $checkperf_out[4]
-                                = (($$result{ $oid_perf_indisc[$i] } - $file_values[$j][5])
+                                = (($$result{ $oid_perf_inerr[$i] } - $file_values[$j][5])
                                 / ($timenow - $file_values[$j][0])) * 60;
                             $checkperf_out[5]
-                                = (($$result{ $oid_perf_outdisc[$i] } - $file_values[$j][6])
+                                = (($$result{ $oid_perf_outerr[$i] } - $file_values[$j][6])
+                                / ($timenow - $file_values[$j][0])) * 60;
+                            $checkperf_out[6]
+                                = (($$result{ $oid_perf_indisc[$i] } - $file_values[$j][7])
+                                / ($timenow - $file_values[$j][0])) * 60;
+                            $checkperf_out[7]
+                                = (($$result{ $oid_perf_outdisc[$i] } - $file_values[$j][8])
                                 / ($timenow - $file_values[$j][0])) * 60;
                         }
                     }
@@ -900,10 +911,12 @@ for (my $i = 0; $i < $num_int; $i++) {
         $file_values[$n_rows][1] = $$result{ $oid_perf_inoct[$i] };
         $file_values[$n_rows][2] = $$result{ $oid_perf_outoct[$i] };
         if (defined($o_ext_checkperf)) {    # Add other values (error & disc)
-            $file_values[$n_rows][3] = $$result{ $oid_perf_inerr[$i] };
-            $file_values[$n_rows][4] = $$result{ $oid_perf_outerr[$i] };
-            $file_values[$n_rows][5] = $$result{ $oid_perf_indisc[$i] };
-            $file_values[$n_rows][6] = $$result{ $oid_perf_outdisc[$i] };
+            $file_values[$n_rows][3] = $$result{ $oid_perf_inpkt[$i] };
+            $file_values[$n_rows][4] = $$result{ $oid_perf_outpkt[$i] };
+            $file_values[$n_rows][5] = $$result{ $oid_perf_inerr[$i] };
+            $file_values[$n_rows][6] = $$result{ $oid_perf_outerr[$i] };
+            $file_values[$n_rows][7] = $$result{ $oid_perf_indisc[$i] };
+            $file_values[$n_rows][8] = $$result{ $oid_perf_outdisc[$i] };
         }
         $n_rows++;
         $return = write_file($temp_file_name, $n_rows, $n_items_check, @file_values);
@@ -1032,8 +1045,10 @@ for (my $i = 0; $i < $num_int; $i++) {
             $perf_out .= "'" . $descr[$i] . "_out_octet'=" . $$result{ $oid_perf_outoct[$i] } . "c ";
         }
         if (defined($o_perfe)) {
+            $perf_out .= "'" . $descr[$i] . "_in_packets'=" . $$result{ $oid_perf_inpkt[$i] } . "c ";
             $perf_out .= "'" . $descr[$i] . "_in_error'=" . $$result{ $oid_perf_inerr[$i] } . "c ";
             $perf_out .= "'" . $descr[$i] . "_in_discard'=" . $$result{ $oid_perf_indisc[$i] } . "c ";
+            $perf_out .= "'" . $descr[$i] . "_out_packets'=" . $$result{ $oid_perf_outpkt[$i] } . "c ";
             $perf_out .= "'" . $descr[$i] . "_out_error'=" . $$result{ $oid_perf_outerr[$i] } . "c ";
             $perf_out .= "'" . $descr[$i] . "_out_discard'=" . $$result{ $oid_perf_outdisc[$i] } . "c ";
         }
